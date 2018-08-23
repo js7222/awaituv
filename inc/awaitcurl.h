@@ -191,14 +191,14 @@ struct curl_requester_t
 
         promise_t<http_response_t>::state_type* state;
         curl_easy_getinfo(handle, CURLINFO_PRIVATE, &state);
-        state->_value.curl_code = message->data.result;
+        state->value_.curl_code = message->data.result;
 
-        curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &state->_value.http_code);
-        // finalize_value will resume the coroutine and the easy handle coudl be released
+        curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &state->value_.http_code);
+        // finalize_value will resume the coroutine and the easy handle could be released
         // so remove it now.
         curl_multi_remove_handle(multi_handle, handle);
         state->finalize_value();
-        state->unlock();
+        state->release();
       }
     }
   }
@@ -230,7 +230,7 @@ struct curl_requester_t
   future_t<http_response_t> invoke(CURL* handle)
   {
     promise_t<http_response_t> promise;
-    auto state = promise._state->lock();
+    auto state = promise.state_->addref();
 
     if (verbose)
       curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);
@@ -239,7 +239,7 @@ struct curl_requester_t
       (write_callback)[](char *buffer, size_t size, size_t nmemb, void *userp)->size_t
     {
       auto state = static_cast<promise_t<http_response_t>::state_type*>(userp);
-      state->_value.str += std::string(buffer, buffer + size * nmemb);
+      state->value_.str += std::string(buffer, buffer + size * nmemb);
       return size * nmemb;
     });
     curl_easy_setopt(handle, CURLOPT_WRITEDATA, state);
@@ -248,7 +248,7 @@ struct curl_requester_t
       (header_callback)[](char *buffer, size_t size, size_t nmemb, void *userp)->size_t
     {
       auto state = static_cast<promise_t<http_response_t>::state_type*>(userp);
-      state->_value.headers.push_back(std::string(buffer, buffer + size * nmemb));
+      state->value_.headers.push_back(std::string(buffer, buffer + size * nmemb));
       return size * nmemb;
     });
     curl_easy_setopt(handle, CURLOPT_HEADERDATA, state);

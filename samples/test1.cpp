@@ -75,7 +75,7 @@ future_t<void> start_http_google()
     if (co_await addr == 0)
     {
       uv_connect_t connectreq;
-      auto connect = tcp_connect(&connectreq, &socket, addr._state->_addrinfo->ai_addr);
+      auto connect = tcp_connect(&connectreq, &socket, addr.state_->_addrinfo->ai_addr);
       if (co_await connect == 0)
       {
         string_buf_t buffer{ httpget };

@@ -120,16 +120,20 @@ future_t<void> start_dump_file(const std::string& str)
   // We can use the same request object for all file operations as they don't overlap.
   static_buf_t<1024> buffer;
 
+#if 0
   fs_t openreq;
   awaitable_state<uv_file> state;
   uv_file file = co_await fs_open(state, uv_default_loop(), &openreq, str.c_str(), O_RDONLY, 0);
+#else
+  fs_open_state_t open_state;
+  uv_file file = co_await open_state(uv_default_loop(), str.c_str(), O_RDONLY, 0);
+#endif
   if (file > 0)
   {
     while (1)
     {
-      fs_t readreq;
-      awaitable_state<int> readstate;
-      int result = co_await fs_read(readstate, uv_default_loop(), &readreq, file, &buffer, 1, -1);
+      fs_read_state_t read_state;
+      int result = co_await read_state(uv_default_loop(), file, &buffer, 1, -1);
       if (result <= 0)
         break;
       buffer.len = result;
