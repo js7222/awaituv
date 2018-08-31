@@ -1,24 +1,24 @@
-// TestUV.cpp : Defines the entry point for the console application.
+// Test2.cpp : Defines the entry point for the console application.
 //
 
 #include <vector>
 #include <string>
 #include <fcntl.h>
 #include <awaituv.h>
+#include "google.h"
 
 using namespace awaituv;
 using namespace std;
 
 bool run_timer = true;
 uv_timer_t color_timer;
-future_t<void> start_color_changer()
+awaitable_t<void> start_color_changer()
 {
   static string_buf_t normal = "\033[40;37m";
   static string_buf_t red = "\033[41;37m";
 
   uv_timer_init(uv_default_loop(), &color_timer);
 
-  uv_write_t writereq;
   uv_tty_t tty;
   uv_tty_init(uv_default_loop(), &tty, 1, 0);
   uv_tty_set_mode(&tty, UV_TTY_MODE_NORMAL);
@@ -31,6 +31,7 @@ future_t<void> start_color_changer()
   timer_state_t timerstate;
   timer_start(timerstate, &color_timer, 1, 1);
 
+  uv_write_t writereq;
   while (run_timer)
   {
     (void) co_await timerstate.next();
@@ -65,96 +66,32 @@ void stop_color_changer()
   ref(&color_timer);
 }
 
-future_t<void> start_http_google()
-{
-  uv_tcp_t socket;
-  if (uv_tcp_init(uv_default_loop(), &socket) == 0)
-  {
-    // Use HTTP/1.0 rather than 1.1 so that socket is closed by server when done sending data.
-    // Makes it easier than figuring it out on our end...
-    const char* httpget =
-      "GET / HTTP/1.0\r\n"
-      "Host: www.google.com\r\n"
-      "Cache-Control: max-age=0\r\n"
-      "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8\r\n"
-      "\r\n";
-    const char* host = "www.google.com";
-
-    uv_getaddrinfo_t req;
-    addrinfo_state addrstate;
-    if (co_await getaddrinfo(addrstate, uv_default_loop(), &req, host, "http", nullptr) == 0)
-    {
-      uv_connect_t connectreq;
-      awaitable_state<int> connectstate;
-      if (co_await tcp_connect(connectstate, &connectreq, &socket, addrstate._addrinfo->ai_addr) == 0)
-      {
-        string_buf_t buffer{ httpget };
-        ::uv_write_t writereq;
-        awaitable_state<int> writestate;
-        if (co_await write(writestate, &writereq, connectreq.handle, &buffer, 1) == 0)
-        {
-          read_request_t reader;
-          if (read_start(connectreq.handle, &reader) == 0)
-          {
-            while (1)
-            {
-              auto state = co_await reader.read_next();
-              if (state->_nread <= 0)
-                break;
-              uv_buf_t buf = uv_buf_init(state->_buf.base, state->_nread);
-              fs_t writereq;
-              awaitable_state<int> writestate;
-              (void) co_await fs_write(writestate, uv_default_loop(), &writereq, 1 /*stdout*/, &buf, 1, -1);
-            }
-          }
-        }
-      }
-    }
-    awaitable_state<void> closestate;
-    co_await close(closestate, &socket);
-  }
-}
-
-future_t<void> start_dump_file(const std::string& str)
+awaitable_t<void> start_dump_file(const std::string& str)
 {
   // We can use the same request object for all file operations as they don't overlap.
   static_buf_t<1024> buffer;
 
-#if 0
-  fs_t openreq;
-  awaitable_state<uv_file> state;
-  uv_file file = co_await fs_open(state, uv_default_loop(), &openreq, str.c_str(), O_RDONLY, 0);
-#else
-  fs_open_state_t open_state;
-  uv_file file = co_await open_state(uv_default_loop(), str.c_str(), O_RDONLY, 0);
-#endif
+  uv_file file = co_await fs_open(uv_default_loop(), str.c_str(), O_RDONLY, 0);
   if (file > 0)
   {
     while (1)
     {
-      fs_read_state_t read_state;
-      int result = co_await read_state(uv_default_loop(), file, &buffer, 1, -1);
+      int result = co_await fs_read(uv_default_loop(), file, &buffer, 1, -1);
       if (result <= 0)
         break;
       buffer.len = result;
-      fs_t req;
-      awaitable_state<int> writestate;
-      (void) co_await fs_write(writestate, uv_default_loop(), &req, 1 /*stdout*/, &buffer, 1, -1);
+      (void) co_await fs_write(uv_default_loop(), 1 /*stdout*/, &buffer, 1, -1);
     }
-    fs_t closereq;
-    awaitable_state<int> closestate;
-    (void) co_await fs_close(closestate, uv_default_loop(), &closereq, file);
+    (void) co_await fs_close(uv_default_loop(), file);
   }
 }
 
-future_t<void> start_hello_world()
+awaitable_t<void> start_hello_world()
 {
   for (int i = 0; i < 1000; ++i)
   {
     string_buf_t buf("\nhello world\n");
-    fs_t req;
-    awaitable_state<int> writestate;
-    (void) co_await fs_write(writestate, uv_default_loop(), &req, 1 /*stdout*/, &buf, 1, -1);
+    (void) co_await fs_write(uv_default_loop(), 1 /*stdout*/, &buf, 1, -1);
   }
 }
 

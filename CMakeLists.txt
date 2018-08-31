@@ -2,7 +2,7 @@ cmake_minimum_required (VERSION 2.6)
 project (awaituv)
 
 if (MSVC)
-SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -await /std:c++latest")
+SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -await -permissive- /std:c++latest")
 link_libraries (libuv libcurl)
 endif ()
 

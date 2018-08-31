@@ -31,7 +31,7 @@ struct curl_global_t
   }
 };
 
-// Basis http response type
+// Basic http response type
 struct http_response_t
 {
   long http_code;
@@ -189,16 +189,15 @@ struct curl_requester_t
       {
         CURL* handle = message->easy_handle;
 
-        promise_t<http_response_t>::state_type* state;
+        awaitable_state<http_response_t>* state;
         curl_easy_getinfo(handle, CURLINFO_PRIVATE, &state);
         state->value_.curl_code = message->data.result;
 
         curl_easy_getinfo(handle, CURLINFO_RESPONSE_CODE, &state->value_.http_code);
-        // finalize_value will resume the coroutine and the easy handle could be released
+        // set_value will resume the coroutine and the easy handle could be released
         // so remove it now.
         curl_multi_remove_handle(multi_handle, handle);
-        state->finalize_value();
-        state->release();
+        state->set_value(); // directly set individual parts, no need to pass whole response
       }
     }
   }
@@ -227,10 +226,9 @@ struct curl_requester_t
     }
   }
 
-  future_t<http_response_t> invoke(CURL* handle)
+  awaitable_state<http_response_t>& invoke(awaitable_state<http_response_t>& awaitable, CURL* handle)
   {
-    promise_t<http_response_t> promise;
-    auto state = promise.state_->addref();
+    auto state = &awaitable;
 
     if (verbose)
       curl_easy_setopt(handle, CURLOPT_VERBOSE, 1);
@@ -238,7 +236,7 @@ struct curl_requester_t
     curl_easy_setopt(handle, CURLOPT_WRITEFUNCTION,
       (write_callback)[](char *buffer, size_t size, size_t nmemb, void *userp)->size_t
     {
-      auto state = static_cast<promise_t<http_response_t>::state_type*>(userp);
+      auto state = static_cast<awaitable_state<http_response_t>*>(userp);
       state->value_.str += std::string(buffer, buffer + size * nmemb);
       return size * nmemb;
     });
@@ -247,7 +245,7 @@ struct curl_requester_t
     curl_easy_setopt(handle, CURLOPT_HEADERFUNCTION,
       (header_callback)[](char *buffer, size_t size, size_t nmemb, void *userp)->size_t
     {
-      auto state = static_cast<promise_t<http_response_t>::state_type*>(userp);
+      auto state = static_cast<awaitable_state<http_response_t>*>(userp);
       state->value_.headers.push_back(std::string(buffer, buffer + size * nmemb));
       return size * nmemb;
     });
@@ -256,11 +254,18 @@ struct curl_requester_t
     curl_easy_setopt(handle, CURLOPT_PRIVATE, state);
     curl_multi_add_handle(multi_handle, handle);
 
-    return promise.get_future();
+    return awaitable;
   }
 
-  future_t<http_response_t> invoke(const char *url)
+  awaitable_t<http_response_t> invoke(CURL* handle)
   {
+    awaitable_state<http_response_t> state;
+    co_return co_await invoke(state, handle);
+  }
+
+  awaitable_t<http_response_t> invoke(const char *url)
+  {
+    awaitable_state<http_response_t> state;
     auto handle = curl_easy_init();
     curl_easy_setopt(handle, CURLOPT_URL, url);
     curl_easy_setopt(handle, CURLOPT_HTTPGET, 1L);
@@ -270,6 +275,7 @@ struct curl_requester_t
     curl_easy_cleanup(handle);
     co_return response;
   }
+
 };
 
 } // namespace
