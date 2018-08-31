@@ -170,6 +170,10 @@ struct awaitable_t : public awaitable_common
 
     std::experimental::suspend_never initial_suspend() const { return {}; }
     std::experimental::suspend_never final_suspend() const { return {}; }
+    [[noreturn]] void unhandled_exception()
+    {
+      std::terminate();
+    }
   };
 
   const T& await_resume() const
@@ -253,6 +257,10 @@ struct awaitable_t<void> : public awaitable_common
 
     std::experimental::suspend_never initial_suspend() const { return {}; }
     std::experimental::suspend_never final_suspend() const { return {}; }
+    [[noreturn]] void unhandled_exception()
+    {
+      std::terminate();
+    }
   };
 
   void await_resume() const
@@ -289,14 +297,14 @@ struct awaitable_t<void> : public awaitable_common
 template <typename T>
 awaitable_t<void> future_of_all(T& f)
 {
-  co_await f;
+  (void) co_await f;
 }
 
 template <typename T, typename... Rest>
 awaitable_t<void> future_of_all(T& f, Rest&... args)
 {
-  co_await f;
-  co_await future_of_all(args...);
+  (void) co_await f;
+  (void) co_await future_of_all(args...);
 }
 
 // future_of_all_range will return a vector of results when all futures complete

@@ -24,7 +24,7 @@ awaitable_t<void> test_b()
   auto results = co_await fut;
   printf("\n");
   for (auto& i : results)
-    printf("%d\n", i);
+    printf("%zu\n", i);
 }
 
 awaitable_t<void> test_c()
@@ -36,7 +36,7 @@ awaitable_t<void> test_c()
   auto results = co_await fut;
   printf("\n");
   for (auto& i : results)
-    printf("%d\n", i);
+    printf("%zu\n", i);
 }
 
 //awaitable_t<void> test_d()

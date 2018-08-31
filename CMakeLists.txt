@@ -7,7 +7,7 @@ link_libraries (libuv libcurl)
 endif ()
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lpthread -fcoroutines-ts -std=c++14")
+SET (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -fcoroutines-ts -std=c++14 -stdlib=libc++")
 find_package (CURL REQUIRED)
 link_libraries (${CURL_LIBRARIES})
 link_libraries (libuv.a)
