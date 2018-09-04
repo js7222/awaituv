@@ -10,14 +10,16 @@
 using namespace awaituv;
 using namespace std;
 
-awaitable_t<void> start_dump_file(const std::string& str)
+awaitable_t<void> start_dump_file(const std::string str)
 {
   // We can use the same request object for all file operations as they don't overlap.
   static_buf_t<1024> buffer;
 
+  printf("opening %s\n", str.c_str());
   uv_file file = co_await fs_open(uv_default_loop(), str.c_str(), O_RDONLY, 0);
   if (file > 0)
   {
+    printf("opened %s\n", str.c_str());
     (void) co_await fs_close(uv_default_loop(), file);
   }
 }
