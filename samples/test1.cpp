@@ -29,25 +29,25 @@ awaitable_t<void> start_color_changer()
   unref(&color_timer);
 
   timer_state_t timerstate;
-  timer_start(timerstate, &color_timer, 1, 1);
+  uv_timer_start(timerstate, &color_timer, 1, 1);
 
   while (run_timer)
   {
     (void) co_await timerstate.next();
 
     if (++cnt % 2 == 0)
-      (void) co_await write(reinterpret_cast<uv_stream_t*>(&tty), &normal, 1);
+      (void) co_await uv_write(reinterpret_cast<uv_stream_t*>(&tty), &normal, 1);
     else
-      (void) co_await write(reinterpret_cast<uv_stream_t*>(&tty), &red, 1);
+      (void) co_await uv_write(reinterpret_cast<uv_stream_t*>(&tty), &red, 1);
   }
 
   //reset back to normal
-  (void) co_await write(reinterpret_cast<uv_stream_t*>(&tty), &normal, 1);
+  (void) co_await uv_write(reinterpret_cast<uv_stream_t*>(&tty), &normal, 1);
 
   uv_tty_reset_mode();
   awaitable_state<void> state;
-  co_await close(state, &tty);
-  co_await close(state, &color_timer); // close handle
+  co_await uv_close(state, &tty);
+  co_await uv_close(state, &color_timer); // close handle
 }
 
 void stop_color_changer()
@@ -62,18 +62,18 @@ awaitable_t<void> start_dump_file(const std::string& str)
   // We can use the same request object for all file operations as they don't overlap.
   static_buf_t<1024> buffer;
 
-  uv_file file = co_await fs_open(uv_default_loop(), str.c_str(), O_RDONLY, 0);
+  uv_file file = co_await uv_fs_open(uv_default_loop(), str.c_str(), O_RDONLY, 0);
   if (file > 0)
   {
     while (1)
     {
-      int result = co_await fs_read(uv_default_loop(), file, &buffer, 1, -1);
+      int result = co_await uv_fs_read(uv_default_loop(), file, &buffer, 1, -1);
       if (result <= 0)
         break;
       buffer.len = result;
-      (void) co_await fs_write(uv_default_loop(), 1 /*stdout*/, &buffer, 1, -1);
+      (void) co_await uv_fs_write(uv_default_loop(), 1 /*stdout*/, &buffer, 1, -1);
     }
-    (void) co_await fs_close(uv_default_loop(), file);
+    (void) co_await uv_fs_open(uv_default_loop(), file);
   }
 }
 
@@ -82,7 +82,7 @@ awaitable_t<void> start_hello_world()
   for (int i = 0; i < 1000; ++i)
   {
     string_buf_t buf("\nhello world\n");
-    (void) co_await fs_write(uv_default_loop(), 1 /*stdout*/, &buf, 1, -1);
+    (void) co_await uv_fs_write(uv_default_loop(), 1 /*stdout*/, &buf, 1, -1);
   }
 }
 

@@ -292,7 +292,6 @@ struct awaitable_t<void> : public awaitable_common
   promise_type& promise_;
 };
 
-
 // future_of_all is pretty trivial as we can just await on each argument
 template <typename T>
 awaitable_t<void> future_of_all(T& f)
@@ -544,8 +543,31 @@ auto ref(T* handle, typename std::enable_if<is_uv_handle_t<T>::value>::type* dum
   uv_ref(reinterpret_cast<uv_handle_t*>(handle));
 }
 
-// return reference to passed in awaitable so that fs_open is directly awaitable
-inline auto& fs_open(awaitable_state<uv_file>& awaitable, uv_loop_t* loop, uv_fs_t* req, const char* path, int flags, int mode)
+//
+inline auto& uv_shutdown(awaitable_state<int>& awaitable, uv_shutdown_t* req, uv_stream_t* handle)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_shutdown(req, handle,
+    [](uv_shutdown_t* req, int status) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(status);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_shutdown(uv_stream_t* handle)
+{
+  uv_shutdown_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_shutdown(state, &req, handle);
+}
+
+// return reference to passed in awaitable so that uv_fs_open is directly awaitable
+inline auto& uv_fs_open(awaitable_state<uv_file>& awaitable, uv_loop_t* loop, uv_fs_t* req, const char* path, int flags, int mode)
 {
   req->data = &awaitable;
 
@@ -560,14 +582,14 @@ inline auto& fs_open(awaitable_state<uv_file>& awaitable, uv_loop_t* loop, uv_fs
   return awaitable;
 }
 
-inline awaitable_t<uv_file> fs_open(uv_loop_t* loop, const char* path, int flags, int mode)
+inline awaitable_t<uv_file> uv_fs_open(uv_loop_t* loop, const char* path, int flags, int mode)
 {
   fs_t req;
   awaitable_state<uv_file> state;
-  co_return co_await fs_open(state, loop, &req, path, flags, mode);
+  co_return co_await uv_fs_open(state, loop, &req, path, flags, mode);
 }
 
-inline auto& fs_close(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t* req, uv_file file)
+inline auto& uv_fs_open(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t* req, uv_file file)
 {
   req->data = &awaitable;
 
@@ -582,36 +604,14 @@ inline auto& fs_close(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t*
   return awaitable;
 }
 
-inline awaitable_t<int> fs_close(uv_loop_t* loop, uv_file file)
+inline awaitable_t<int> uv_fs_open(uv_loop_t* loop, uv_file file)
 {
   fs_t req;
   awaitable_state<int> state;
-  co_return co_await fs_close(state, loop, &req, file);
+  co_return co_await uv_fs_open(state, loop, &req, file);
 }
 
-inline auto& fs_write(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t* req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset)
-{
-  req->data = &awaitable;
-
-  auto ret = uv_fs_write(loop, req, file, bufs, nbufs, offset,
-    [](uv_fs_t* req) -> void
-  {
-    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
-  });
-
-  if (ret != 0)
-    awaitable.set_value(ret);
-  return awaitable;
-}
-
-inline awaitable_t<int> fs_write(uv_loop_t* loop, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset)
-{
-  fs_t req;
-  awaitable_state<int> state;
-  co_return co_await fs_write(state, loop, &req, file, bufs, nbufs, offset);
-}
-
-inline auto& fs_read(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t* req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset)
+inline auto& uv_fs_read(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t* req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset)
 {
   req->data = &awaitable;
 
@@ -626,15 +626,710 @@ inline auto& fs_read(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t* 
   return awaitable;
 }
 
-inline awaitable_t<int> fs_read(uv_loop_t* loop, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset)
+inline awaitable_t<int> uv_fs_read(uv_loop_t* loop, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset)
 {
   fs_t req;
   awaitable_state<int> state;
-  co_return co_await fs_read(state, loop, &req, file, bufs, nbufs, offset);
+  co_return co_await uv_fs_read(state, loop, &req, file, bufs, nbufs, offset);
+}
+
+inline auto& fs_unlink(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t* req, const char* path)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_unlink(loop, req, path,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> fs_unlink(uv_loop_t* loop, const char* path)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await fs_unlink(state, loop, &req, path);
+}
+
+inline auto& uv_fs_write(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t* req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_write(loop, req, file, bufs, nbufs, offset,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_write(uv_loop_t* loop, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_write(state, loop, &req, file, bufs, nbufs, offset);
+}
+
+inline auto& uv_fs_copyfile(awaitable_state<int>& awaitable,
+                         uv_loop_t* loop,
+                         uv_fs_t* req, 
+                         const char* path,
+                         const char* new_path,
+                         int flags)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_copyfile(loop, req, path, new_path, flags,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_copyfile(uv_loop_t* loop,
+                                    const char* path,
+                                    const char* new_path,
+                                    int flags)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_copyfile(state, loop, &req, path, new_path, flags);
+}
+
+inline auto& uv_fs_mkdir(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path,
+  int mode)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_mkdir(loop, req, path, mode,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_mkdir(uv_loop_t* loop,
+  const char* path,
+  int mode)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_mkdir(state, loop, &req, path, mode);
+}
+
+inline auto& uv_fs_mkdtemp(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* tpl)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_mkdtemp(loop, req, tpl,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_mkdtemp(uv_loop_t* loop, const char* tpl)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_mkdtemp(state, loop, &req, tpl);
+}
+
+inline auto& uv_fs_rmdir(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_rmdir(loop, req, path,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_rmdir(uv_loop_t* loop, const char* path)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_rmdir(state, loop, &req, path);
+}
+
+// TODO - uv_fs_scandir
+
+inline auto& uv_fs_stat(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_stat(loop, req, path,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_stat(uv_loop_t* loop, const char* path)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_stat(state, loop, &req, path);
+}
+
+inline auto& uv_fs_fstat(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  uv_file file)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_fstat(loop, req, file,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_fstat(uv_loop_t* loop, uv_file file)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_fstat(state, loop, &req, file);
+}
+
+inline auto& uv_fs_rename(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path,
+  const char* new_path)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_rename(loop, req, path, new_path,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_rename(uv_loop_t* loop,
+  const char* path,
+  const char* new_path)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_rename(state, loop, &req, path, new_path);
+}
+
+inline auto& uv_fs_fsync(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  uv_file file)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_fsync(loop, req, file,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_fsync(uv_loop_t* loop, uv_file file)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_fsync(state, loop, &req, file);
+}
+
+inline auto& uv_fs_fdatasync(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  uv_file file)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_fdatasync(loop, req, file,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_fdatasync(uv_loop_t* loop, uv_file file)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_fdatasync(state, loop, &req, file);
+}
+
+inline auto& uv_fs_ftruncate(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  uv_file file,
+  int64_t offset)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_ftruncate(loop, req, file, offset,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_ftruncate(uv_loop_t* loop, uv_file file, int64_t offset)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_ftruncate(state, loop, &req, file, offset);
+}
+
+inline auto& uv_fs_sendfile(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  uv_file out_fd,
+  uv_file in_fd,
+  int64_t in_offset,
+  size_t length)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_sendfile(loop, req, out_fd, in_fd, in_offset, length,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_sendfile(uv_loop_t* loop,
+  uv_file out_fd,
+  uv_file in_fd,
+  int64_t in_offset,
+  size_t length)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_sendfile(state, loop, &req, out_fd, in_fd, in_offset, length);
+}
+
+inline auto& uv_fs_access(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path,
+  int mode)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_access(loop, req, path, mode,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_access(uv_loop_t* loop,
+  const char* path,
+  int mode)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_access(state, loop, &req, path, mode);
+}
+
+inline auto& uv_fs_chmod(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path,
+  int mode)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_chmod(loop, req, path, mode,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_chmod(uv_loop_t* loop,
+  const char* path,
+  int mode)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_chmod(state, loop, &req, path, mode);
+}
+
+inline auto& uv_fs_utime(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path,
+  double atime,
+  double mtime)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_utime(loop, req, path, atime, mtime,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_utime(uv_loop_t* loop,
+  const char* path,
+  double atime,
+  double mtime)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_utime(state, loop, &req, path, atime, mtime);
+}
+
+inline auto& uv_fs_futime(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  uv_file file,
+  double atime,
+  double mtime)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_futime(loop, req, file, atime, mtime,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_futime(uv_loop_t* loop,
+  uv_file file,
+  double atime,
+  double mtime)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_futime(state, loop, &req, file, atime, mtime);
+}
+
+inline auto& uv_fs_lstat(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_fs_t* req, const char* path)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_lstat(loop, req, path,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_lstat(uv_loop_t* loop, const char* path)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_lstat(state, loop, &req, path);
+}
+
+inline auto& uv_fs_link(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path,
+  const char* new_path)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_link(loop, req, path, new_path,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_link(uv_loop_t* loop,
+  const char* path,
+  const char* new_path)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_link(state, loop, &req, path, new_path);
+}
+
+inline auto& uv_fs_symlink(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path,
+  const char* new_path,
+  int flags)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_symlink(loop, req, path, new_path, flags,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_symlink(uv_loop_t* loop,
+  const char* path,
+  const char* new_path,
+  int flags)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_symlink(state, loop, &req, path, new_path, flags);
+}
+
+inline auto& uv_fs_readlink(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_readlink(loop, req, path,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_readlink(uv_loop_t* loop, const char* path)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_readlink(state, loop, &req, path);
+}
+
+inline auto& uv_fs_realpath(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_realpath(loop, req, path,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_realpath(uv_loop_t* loop, const char* path)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_realpath(state, loop, &req, path);
+}
+
+inline auto& uv_fs_fchmod(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  uv_file file,
+  int mode)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_fchmod(loop, req, file, mode,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_fchmod(uv_loop_t* loop,
+  uv_file file,
+  int mode)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_fchmod(state, loop, &req, file, mode);
+}
+
+inline auto& uv_fs_chown(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  const char* path,
+  uv_uid_t uid,
+  uv_gid_t gid)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_chown(loop, req, path, uid, gid,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_chown(uv_loop_t* loop,
+  const char* path,
+  uv_uid_t uid,
+  uv_gid_t gid)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_chown(state, loop, &req, path, uid, gid);
+}
+
+inline auto& uv_fs_fchown(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_fs_t* req,
+  uv_file file,
+  uv_uid_t uid,
+  uv_gid_t gid)
+{
+  req->data = &awaitable;
+
+  auto ret = uv_fs_fchown(loop, req, file, uid, gid,
+    [](uv_fs_t* req) -> void
+  {
+    static_cast<awaitable_state<int>*>(req->data)->set_value(req->result);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_fs_fchown(uv_loop_t* loop,
+  uv_file file,
+  uv_uid_t uid,
+  uv_gid_t gid)
+{
+  fs_t req;
+  awaitable_state<int> state;
+  co_return co_await uv_fs_fchown(state, loop, &req, file, uid, gid);
+}
+
+inline auto& uv_listen(awaitable_state<int>& awaitable, uv_stream_t* stream, int backlog)
+{
+  stream->data = &awaitable;
+
+  auto ret = uv_listen(stream, backlog,
+    [](uv_stream_t* stream, int status) -> void
+  {
+    static_cast<awaitable_state<int>*>(stream->data)->set_value(status);
+  });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_listen(uv_stream_t* stream, int backlog)
+{
+  awaitable_state<int> state;
+  co_return co_await uv_listen(state, stream, backlog);
 }
 
 // generic stream functions
-inline auto& write(awaitable_state<int>& awaitable, ::uv_write_t* req, uv_stream_t* handle, const uv_buf_t bufs[], unsigned int nbufs)
+inline auto& uv_write(awaitable_state<int>& awaitable, ::uv_write_t* req, uv_stream_t* handle, const uv_buf_t bufs[], unsigned int nbufs)
 {
   req->data = &awaitable;
 
@@ -649,15 +1344,15 @@ inline auto& write(awaitable_state<int>& awaitable, ::uv_write_t* req, uv_stream
   return awaitable;
 }
 
-inline awaitable_t<int> write(uv_stream_t* handle, const uv_buf_t bufs[], unsigned int nbufs)
+inline awaitable_t<int> uv_write(uv_stream_t* handle, const uv_buf_t bufs[], unsigned int nbufs)
 {
   uv_write_t req;
   awaitable_state<int> state;
-  co_return co_await write(state, &req, handle, bufs, nbufs);
+  co_return co_await uv_write(state, &req, handle, bufs, nbufs);
 }
 
 template <typename T>
-auto& close(awaitable_state<void>& awaitable, T* handle, typename std::enable_if<is_uv_handle_t<T>::value>::type* dummy = nullptr)
+auto& uv_close(awaitable_state<void>& awaitable, T* handle, typename std::enable_if<is_uv_handle_t<T>::value>::type* dummy = nullptr)
 {
   handle->data = &awaitable;
 
@@ -671,10 +1366,10 @@ auto& close(awaitable_state<void>& awaitable, T* handle, typename std::enable_if
 }
 
 template <typename T>
-inline awaitable_t<void> close(T* handle, typename std::enable_if<is_uv_handle_t<T>::value>::type* dummy = nullptr)
+inline awaitable_t<void> uv_close(T* handle, typename std::enable_if<is_uv_handle_t<T>::value>::type* dummy = nullptr)
 {
   awaitable_state<void> state;
-  co_await close(state, handle);
+  co_await uv_close(state, handle);
 }
 
 struct timer_state_t : public awaitable_state<int>
@@ -686,7 +1381,7 @@ struct timer_state_t : public awaitable_state<int>
   }
 };
 
-inline auto& timer_start(timer_state_t& awaitable, uv_timer_t* timer, uint64_t timeout, uint64_t repeat)
+inline auto& uv_timer_start(timer_state_t& awaitable, uv_timer_t* timer, uint64_t timeout, uint64_t repeat)
 {
   timer->data = &awaitable;
 
@@ -701,7 +1396,7 @@ inline auto& timer_start(timer_state_t& awaitable, uv_timer_t* timer, uint64_t t
   return awaitable;
 }
 
-inline auto& timer_start(awaitable_state<int>& awaitable, uv_timer_t* timer, uint64_t timeout)
+inline auto& uv_timer_start(awaitable_state<int>& awaitable, uv_timer_t* timer, uint64_t timeout)
 {
   timer->data = &awaitable;
 
@@ -716,14 +1411,14 @@ inline auto& timer_start(awaitable_state<int>& awaitable, uv_timer_t* timer, uin
   return awaitable;
 }
 
-inline awaitable_t<int> timer_start(uint64_t timeout)
+inline awaitable_t<int> uv_timer_start(uint64_t timeout)
 {
   awaitable_state<int> state;
   uv_timer_t timer;
-  co_return co_await timer_start(state, &timer, timeout);
+  co_return co_await uv_timer_start(state, &timer, timeout);
 }
 
-inline auto& tcp_connect(awaitable_state<int>& awaitable, uv_connect_t* req, uv_tcp_t* socket, const struct sockaddr* dest)
+inline auto& uv_tcp_connect(awaitable_state<int>& awaitable, uv_connect_t* req, uv_tcp_t* socket, const struct sockaddr* dest)
 {
   req->data = &awaitable;
 
@@ -738,13 +1433,13 @@ inline auto& tcp_connect(awaitable_state<int>& awaitable, uv_connect_t* req, uv_
   return awaitable;
 }
 
-inline awaitable_t<int> tcp_connect(uv_connect_t* req, uv_tcp_t* socket, const struct sockaddr* dest)
+inline awaitable_t<int> uv_tcp_connect(uv_connect_t* req, uv_tcp_t* socket, const struct sockaddr* dest)
 {
   awaitable_state<int> state;
-  co_return co_await tcp_connect(state, req, socket, dest);
+  co_return co_await uv_tcp_connect(state, req, socket, dest);
 }
 
-inline auto& getaddrinfo(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_getaddrinfo_t* req, const char* node, const char* service, const struct addrinfo* hints)
+inline auto& uv_getaddrinfo(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_getaddrinfo_t* req, const char* node, const char* service, const struct addrinfo* hints)
 {
   req->data = &awaitable;
 
@@ -762,10 +1457,10 @@ inline auto& getaddrinfo(awaitable_state<int>& awaitable, uv_loop_t* loop, uv_ge
   return awaitable;
 }
 
-inline awaitable_t<int> getaddrinfo(uv_loop_t* loop, uv_getaddrinfo_t* req, const char* node, const char* service, const struct addrinfo* hints)
+inline awaitable_t<int> uv_getaddrinfo(uv_loop_t* loop, uv_getaddrinfo_t* req, const char* node, const char* service, const struct addrinfo* hints)
 {
   awaitable_state<int> state;
-  co_return co_await getaddrinfo(state, loop, req, node, service, hints);
+  co_return co_await uv_getaddrinfo(state, loop, req, node, service, hints);
 }
 
 struct buffer_info
@@ -906,4 +1601,32 @@ inline awaitable_t<std::string> stream_to_string(uv_stream_t* handle)
   }
   co_return str;
 }
+
+inline auto& uv_queue_work(awaitable_state<int>& awaitable,
+  uv_loop_t* loop,
+  uv_work_t* req,
+  uv_work_cb work_cb)
+{
+  req->data = &awaitable;
+
+  auto ret = ::uv_queue_work(loop, req, work_cb, 
+    [](uv_work_t* req, int status) -> void
+    {
+      static_cast<awaitable_state<int>*>(req->data)->set_value(status);
+    });
+
+  if (ret != 0)
+    awaitable.set_value(ret);
+  return awaitable;
+}
+
+inline awaitable_t<int> uv_queue_work(
+  uv_loop_t* loop,
+  uv_work_t* req,
+  uv_work_cb work_cb)
+{
+  awaitable_state<int> state;
+  co_return co_await uv_queue_work(state, loop, req, work_cb);
+}
+
 } // namespace awaituv

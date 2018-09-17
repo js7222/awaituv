@@ -29,17 +29,17 @@ awaitable_t<void> test3(curl_requester_t& requester)
   {
     sprintf(buffer, "http_code: %ld\n", result.http_code);
     string_buf_t buf{ buffer, strlen(buffer) };
-    (void)co_await fs_write(uv_default_loop(), 1 /*stdout*/, &buf, 1, -1);
+    (void)co_await uv_fs_write(uv_default_loop(), 1 /*stdout*/, &buf, 1, -1);
 
     auto& str = result.str;
     string_buf_t buf2{ str.c_str(), str.size() };
-    (void)co_await fs_write(uv_default_loop(), 1 /*stdout*/, &buf2, 1, -1);
+    (void)co_await uv_fs_write(uv_default_loop(), 1 /*stdout*/, &buf2, 1, -1);
   }
   else
   {
     sprintf(buffer, "failed %d\n", result.curl_code);
     string_buf_t buf{ buffer, strlen(buffer) };
-    (void)co_await fs_write(uv_default_loop(), 1 /*stdout*/, &buf, 1, -1);
+    (void)co_await uv_fs_write(uv_default_loop(), 1 /*stdout*/, &buf, 1, -1);
   }
 
   curl_slist_free_all(headers);

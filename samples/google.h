@@ -17,16 +17,16 @@ inline awaituv::awaitable_t<size_t> start_http_google()
     const char* host = "www.google.com";
 
     awaituv::getaddrinfo_t req;
-    auto state = co_await awaituv::getaddrinfo(uv_default_loop(), &req, host, "http", nullptr);
+    auto state = co_await awaituv::uv_getaddrinfo(uv_default_loop(), &req, host, "http", nullptr);
     if (state == 0)
     {
       auto info = req.addrinfo;
       uv_connect_t connectreq;
-      auto connect = co_await awaituv::tcp_connect(&connectreq, &socket, info->ai_addr);
+      auto connect = co_await awaituv::uv_tcp_connect(&connectreq, &socket, info->ai_addr);
       if (connect == 0)
       {
         awaituv::string_buf_t buffer{ httpget };
-        if (co_await awaituv::write(connectreq.handle, &buffer, 1) == 0)
+        if (co_await awaituv::uv_write(connectreq.handle, &buffer, 1) == 0)
         {
           awaituv::read_request_t reader;
           if (reader.read_start(connectreq.handle) == 0)
@@ -40,13 +40,13 @@ inline awaituv::awaitable_t<size_t> start_http_google()
                 break;
               count += info.nread_;
               uv_buf_t buf = uv_buf_init(info.buf_.base, info.nread_);
-              (void) co_await awaituv::fs_write(uv_default_loop(), 1 /*stdout*/, &buf, 1, -1);
+              (void) co_await awaituv::uv_fs_write(uv_default_loop(), 1 /*stdout*/, &buf, 1, -1);
             }
           }
         }
       }
     }
-    co_await awaituv::close(&socket);
+    co_await awaituv::uv_close(&socket);
   }
   co_return count;
 }
